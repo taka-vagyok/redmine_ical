@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 require "icalendar"
+require "icalendar/tzinfo"
 class ExportsController < ApplicationController
   unloadable
   skip_before_filter :check_if_login_required
@@ -42,21 +43,21 @@ class ExportsController < ApplicationController
 
     cal = Icalendar::Calendar.new
     # タイムゾーン (VTIMEZONE) を作成
-    cal.timezone do
-      tzid 'Asia/Tokyo'
-      standard do
-        tzoffsetfrom '+0900'
-        tzoffsetto   '+0900'
-        dtstart      '19700101T000000'
-        tzname       'JST'
-      end
-    end
+    cal.timezone do |t|
+      t.tzid = 'Asia/Tokyo'
+      # t.standard do |st|
+      #   tzoffsetfrom = '+0900'
+      #   tzoffsetto   = '+0900'
+      #   dtstart      = '19700101T000000'
+      #   tzname       = 'JST'
+	  # end
+	end
 
     ical_name = "Redmine Issue Calender(#{user.name})"
-    cal.custom_property("X-WR-CALNAME", ical_name)
-    cal.custom_property("X-WR-CALDESC", ical_name)
-    cal.custom_property("X-WR-TIMEZONE","Asia/Tokyo")
-    cal.prodid("Redmine iCal Plugin")
+	cal.append_custom_property("X-WR-CALNAME", ical_name)
+    cal.append_custom_property("X-WR-CALDESC", ical_name)
+    cal.append_custom_property("X-WR-TIMEZONE","Asia/Tokyo")
+    cal.prodid = "Redmine iCal Plugin"
     issues.each do |issue|
       next if issue.start_date.blank?
       next if issue.due_date.blank?
@@ -68,15 +69,15 @@ class ExportsController < ApplicationController
 
       # 終日だとhour,minは不要
       # 終日だと開始日の次の日
-      event.dtstart = Date.new(s.year, s.month, s.day)
-      event.dtend = Date.new(e.year, e.month, e.day) + 1.day
-      event.custom_property("CONTACT;CN=#{user.name}", "MAILTO:#{user.mail}")
+      event.dtstart = Icalendar::Values::Date.new( s.strftime("%Y%m%d") )
+      event.dtend = Icalendar::Values::Date.new( (e + 1.day ).strftime("%Y%m%d") )
+      event.append_custom_property("CONTACT;CN=#{user.name}", "MAILTO:#{user.mail}")
       event.description = issue.description
-      event.url("#{request.protocol}#{request.host_with_port}/issues/#{issue.id}")
-      event.created(issue.created_on.strftime("%Y%m%dT%H%M%SZ"))
-      event.last_modified(issue.updated_on.strftime("%Y%m%dT%H%M%SZ"))
+      event.url = "#{request.protocol}#{request.host_with_port}/issues/#{issue.id}"
+      event.created = issue.created_on.strftime("%Y%m%dT%H%M%SZ")
+      event.last_modified = issue.updated_on.strftime("%Y%m%dT%H%M%SZ")
       #event.uid("#{issue.id}@example.com") #Defines a persistent, globally unique id for this item
-      event.uid(set_uid(issue.id)) #Defines a persistent, globally unique id for this item
+      event.uid = set_uid(issue.id) #Defines a persistent, globally unique id for this item
       #event.klass("PRIVATE")
       # 作成者が参加者の中にいればAtendeeではなくorganizerにする
 #       watch_users.each do |watcher|
@@ -99,14 +100,14 @@ class ExportsController < ApplicationController
 #         end
 #       end
 
-      event.custom_property("ORGANIZER;CN=#{user.name}", "MAILTO:#{user.mail}")
-      event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{user.name}", "MAILTO:#{user.mail}")
+      event.append_custom_property("ORGANIZER;CN=#{user.name}", "MAILTO:#{user.mail}")
+      event.append_custom_property("ATTENDEE;ROLE=CHAIR;CN=#{user.name}", "MAILTO:#{user.mail}")
       Watcher.find(:all,
         :joins => "LEFT JOIN users ON watchers.user_id = users.id",
         :conditions => ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]).each do |watcher|
         user = watcher.user
         attendee = Attendee.new(user.mail, {"CN" => user.name})
-        event.custom_property attendee.property_name, attendee.value
+        event.append_custom_property attendee.property_name, attendee.value
       end
 
 
@@ -115,12 +116,12 @@ class ExportsController < ApplicationController
         if ical_setting.alerm
           # アラーム (VALARM) を作成 (複数作成可能)
           event.alarm do
-            action      "DISPLAY"  # 表示で知らせる
-            trigger     "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
-          end
+            action     = "DISPLAY"  # 表示で知らせる
+            trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
+		  end
         end
       end
-      cal.add event
+      cal.add_event event
     end
     # iCalのContent-Typeが必要
     #self.headers['Content-Type'] = "text/calendar; charset=UTF-8"
