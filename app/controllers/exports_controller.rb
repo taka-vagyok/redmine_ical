@@ -23,7 +23,7 @@ class ExportsController < ApplicationController
   end
 
   def generate_ical(ical_setting, user)
-    #today = Date.today
+    #Today = Date.today
     #startdt = today - ical_setting.past
     #enddt = today + ical_setting.future
 
@@ -40,17 +40,20 @@ class ExportsController < ApplicationController
     #issues = Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["issues.start_date <= ? AND issues.due_date <= ? AND issues.assigned_to_id = ? AND st.is_closed = ?", startdt, enddt, user.id, false])
     issues = Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["issues.assigned_to_id = ? AND st.is_closed = ?", user.id, false])
 
+    # Add watching issues, too
+    #issues += Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["? IN (issues.watcher_user_ids) AND st.is_closed = ?", user.id,  false])
 
     cal = Icalendar::Calendar.new
     # タイムゾーン (VTIMEZONE) を作成
     cal.timezone do |t|
       t.tzid = 'Asia/Tokyo'
-      # t.standard do |st|
-      #   tzoffsetfrom = '+0900'
-      #   tzoffsetto   = '+0900'
-      #   dtstart      = '19700101T000000'
-      #   tzname       = 'JST'
-	  # end
+      t.standard do |tst|
+        tst.tzoffsetfrom = '+0900'
+        tst.tzoffsetto   = '+0900'
+        # should set but not worked gem icalendar 2.2.1 bug?. comment out 12/27
+        #tst.tzname       = 'JST'
+        tst.dtstart      = '19700101T000000'
+	  end
 	end
 
     ical_name = "Redmine Issue Calender(#{user.name})"
@@ -115,10 +118,12 @@ class ExportsController < ApplicationController
       if ical_setting
         if ical_setting.alerm
           # アラーム (VALARM) を作成 (複数作成可能)
-          event.alarm do
-            action     = "DISPLAY"  # 表示で知らせる
-            trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
+          event.alarm do |alm|
+            alm.action     = "DISPLAY"  # 表示で知らせる
+            alm.trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
 		  end
+		else
+			event.alarm.action = "NONE"
         end
       end
       cal.add_event event
