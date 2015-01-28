@@ -22,7 +22,7 @@ class ExportsController < ApplicationController
     "#{id.to_s.crypt(salt)}@example.com"
   end
 
-  def generate_ical(ical_setting, user)
+  def get_unclosed_my_issues(user)
     #Today = Date.today
     #startdt = today - ical_setting.past
     #enddt = today + ical_setting.future
@@ -42,7 +42,13 @@ class ExportsController < ApplicationController
 
     # Add watching issues, too
     #issues += Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["? IN (issues.watcher_user_ids) AND st.is_closed = ?", user.id,  false])
+    return issues
+  end
 
+  def generate_ical(ical_setting, user)
+    # get issues
+    issues = get_unclosed_my_issues(user)
+    # gen calendar
     cal = Icalendar::Calendar.new
     # タイムゾーン (VTIMEZONE) を作成
     cal.timezone do |t|
@@ -53,11 +59,11 @@ class ExportsController < ApplicationController
         # should set but not worked gem icalendar 2.2.1 bug?. comment out 12/27
         #tst.tzname       = 'JST'
         tst.dtstart      = '19700101T000000'
-	  end
-	end
+      end
+    end
 
     ical_name = "Redmine Issue Calender(#{user.name})"
-	cal.append_custom_property("X-WR-CALNAME", ical_name)
+    cal.append_custom_property("X-WR-CALNAME", ical_name)
     cal.append_custom_property("X-WR-CALDESC", ical_name)
     cal.append_custom_property("X-WR-TIMEZONE","Asia/Tokyo")
     cal.prodid = "Redmine iCal Plugin"
@@ -81,38 +87,37 @@ class ExportsController < ApplicationController
       event.last_modified = issue.updated_on.strftime("%Y%m%dT%H%M%SZ")
       #event.uid("#{issue.id}@example.com") #Defines a persistent, globally unique id for this item
       event.uid = set_uid(issue.id) #Defines a persistent, globally unique id for this item
-      #event.klass("PRIVATE")
+      # event.klass("PRIVATE")
       # 作成者が参加者の中にいればAtendeeではなくorganizerにする
-#       watch_users.each do |watcher|
-#         if issue.assigned_to_id
-#           if watcher.id == issue.assigned_to_id
-#             event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-#             event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-#           else
-#             attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
-#             event.custom_property attendee.property_name, attendee.value
-#           end
-#         else
-#           if watcher.id == issue.author_id
-#             event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-#             event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-#           else
-#             attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
-#             event.custom_property attendee.property_name, attendee.value
-#           end
-#         end
-#       end
+      # watch_users.each do |watcher|
+      #   if issue.assigned_to_id
+      #     if watcher.id == issue.assigned_to_id
+      #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+      #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+      #     else
+      #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
+      #       event.custom_property attendee.property_name, attendee.value
+      #     end
+      #   else
+      #     if watcher.id == issue.author_id
+      #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+      #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+      #     else
+      #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
+      #       event.custom_property attendee.property_name, attendee.value
+      #     end
+      #   end
+      # end
 
       event.append_custom_property("ORGANIZER;CN=#{user.name}", "MAILTO:#{user.mail}")
       event.append_custom_property("ATTENDEE;ROLE=CHAIR;CN=#{user.name}", "MAILTO:#{user.mail}")
-      Watcher.find(:all,
-        :joins => "LEFT JOIN users ON watchers.user_id = users.id",
-        :conditions => ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]).each do |watcher|
-        user = watcher.user
-        attendee = Attendee.new(user.mail, {"CN" => user.name})
+      watcher_join = "LEFT JOIN users ON watchers.user_id = users.id"
+      watcher_condition =  ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]
+      Watcher.find(:all,:joins => watcher_join ,:conditions => watcher_condition ).each do |watcher|
+        watched_.user = watcher.user
+        attendee = Attendee.new(watched_user.mail, {"CN" => watched_user.name})
         event.append_custom_property attendee.property_name, attendee.value
       end
-
 
       # 設定値を見る
       if ical_setting
@@ -121,9 +126,9 @@ class ExportsController < ApplicationController
           event.alarm do |alm|
             alm.action     = "DISPLAY"  # 表示で知らせる
             alm.trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
-		  end
-		else
-			event.alarm.action = "NONE"
+          end
+        #else
+        #  event.alarm.action = "NONE"
         end
       end
       cal.add_event event
