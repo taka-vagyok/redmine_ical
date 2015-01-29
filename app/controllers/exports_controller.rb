@@ -114,7 +114,7 @@ class ExportsController < ApplicationController
       watcher_join = "LEFT JOIN users ON watchers.user_id = users.id"
       watcher_condition =  ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]
       Watcher.find(:all,:joins => watcher_join ,:conditions => watcher_condition ).each do |watcher|
-        watched_.user = watcher.user
+        watched_user = watcher.user
         attendee = Attendee.new(watched_user.mail, {"CN" => watched_user.name})
         event.append_custom_property attendee.property_name, attendee.value
       end
