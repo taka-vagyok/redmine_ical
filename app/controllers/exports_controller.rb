@@ -45,10 +45,69 @@ class ExportsController < ApplicationController
     return issues
   end
 
+  def generate_event( ical_setting, user, issue )
+    s  = issue.start_date
+    e  = issue.due_date
+    event = Icalendar::Event.new
+    event.summary = issue.subject
+
+    # 終日だとhour,minは不要
+    # 終日だと開始日の次の日
+    event.dtstart = Icalendar::Values::Date.new( s.strftime("%Y%m%d") )
+    event.dtend = Icalendar::Values::Date.new( (e + 1.day ).strftime("%Y%m%d") )
+    event.append_custom_property("CONTACT;CN=#{user.name}", "MAILTO:#{user.mail}")
+    event.description = issue.description
+    event.url = "#{request.protocol}#{request.host_with_port}/issues/#{issue.id}"
+    event.created = issue.created_on.strftime("%Y%m%dT%H%M%SZ")
+    event.last_modified = issue.updated_on.strftime("%Y%m%dT%H%M%SZ")
+    #event.uid("#{issue.id}@example.com") #Defines a persistent, globally unique id for this item
+    event.uid = set_uid(issue.id) #Defines a persistent, globally unique id for this item
+    # event.klass("PRIVATE")
+    # 作成者が参加者の中にいればAtendeeではなくorganizerにする
+    # watch_users.each do |watcher|
+    #   if issue.assigned_to_id
+    #     if watcher.id == issue.assigned_to_id
+    #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+    #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+    #     else
+    #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
+    #       event.custom_property attendee.property_name, attendee.value
+    #     end
+    #   else
+    #     if watcher.id == issue.author_id
+    #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+    #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
+    #     else
+    #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
+    #       event.custom_property attendee.property_name, attendee.value
+    #     end
+    #   end
+    # end
+
+    event.append_custom_property("ORGANIZER;CN=#{user.name}", "MAILTO:#{user.mail}")
+    event.append_custom_property("ATTENDEE;ROLE=CHAIR;CN=#{user.name}", "MAILTO:#{user.mail}")
+
+    # Set watcher as attendee
+    watcher_join = "LEFT JOIN users ON watchers.user_id = users.id"
+    watcher_condition =  ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]
+    Watcher.find(:all,:joins => watcher_join ,:conditions => watcher_condition ).each do |watcher|
+      watched_user = watcher.user
+      attendee = Attendee.new(watched_user.mail, {"CN" => watched_user.name})
+      event.append_custom_property attendee.property_name, attendee.value
+    end
+
+    # 設定値を見る
+    if ical_setting and ical_setting.alerm
+      # アラーム (VALARM) を作成 (複数作成可能)
+      event.alarm do |alm|
+        alm.action     = "DISPLAY"  # 表示で知らせる
+        alm.trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
+      end
+    end
+    return event
+  end
+
   def generate_ical(ical_setting, user)
-    # get issues
-    issues = get_unclosed_my_issues(user)
-    # gen calendar
     cal = Icalendar::Calendar.new
     # タイムゾーン (VTIMEZONE) を作成
     cal.timezone do |t|
@@ -67,72 +126,13 @@ class ExportsController < ApplicationController
     cal.append_custom_property("X-WR-CALDESC", ical_name)
     cal.append_custom_property("X-WR-TIMEZONE","Asia/Tokyo")
     cal.prodid = "Redmine iCal Plugin"
+
+    # Add events from issue
+    issues = get_unclosed_my_issues(user)
     issues.each do |issue|
       next if issue.start_date.blank?
       next if issue.due_date.blank?
-      s  = issue.start_date
-      e  = issue.due_date
-
-      event = Icalendar::Event.new
-      event.summary = issue.subject
-
-      # 終日だとhour,minは不要
-      # 終日だと開始日の次の日
-      event.dtstart = Icalendar::Values::Date.new( s.strftime("%Y%m%d") )
-      event.dtend = Icalendar::Values::Date.new( (e + 1.day ).strftime("%Y%m%d") )
-      event.append_custom_property("CONTACT;CN=#{user.name}", "MAILTO:#{user.mail}")
-      event.description = issue.description
-      event.url = "#{request.protocol}#{request.host_with_port}/issues/#{issue.id}"
-      event.created = issue.created_on.strftime("%Y%m%dT%H%M%SZ")
-      event.last_modified = issue.updated_on.strftime("%Y%m%dT%H%M%SZ")
-      #event.uid("#{issue.id}@example.com") #Defines a persistent, globally unique id for this item
-      event.uid = set_uid(issue.id) #Defines a persistent, globally unique id for this item
-      # event.klass("PRIVATE")
-      # 作成者が参加者の中にいればAtendeeではなくorganizerにする
-      # watch_users.each do |watcher|
-      #   if issue.assigned_to_id
-      #     if watcher.id == issue.assigned_to_id
-      #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-      #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-      #     else
-      #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
-      #       event.custom_property attendee.property_name, attendee.value
-      #     end
-      #   else
-      #     if watcher.id == issue.author_id
-      #       event.custom_property("ORGANIZER;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-      #       event.custom_property("ATTENDEE;ROLE=CHAIR;CN=#{watcher.name}", "MAILTO:#{watcher.mail}")
-      #     else
-      #       attendee = Attendee.new(watcher.mail, {"CN" => watcher.name})
-      #       event.custom_property attendee.property_name, attendee.value
-      #     end
-      #   end
-      # end
-
-      event.append_custom_property("ORGANIZER;CN=#{user.name}", "MAILTO:#{user.mail}")
-      event.append_custom_property("ATTENDEE;ROLE=CHAIR;CN=#{user.name}", "MAILTO:#{user.mail}")
-
-      # Set watcher as attendee
-      watcher_join = "LEFT JOIN users ON watchers.user_id = users.id"
-      watcher_condition =  ["watchers.watchable_type = ? AND watchers.watchable_id = ?", "Issue", issue.id]
-      Watcher.find(:all,:joins => watcher_join ,:conditions => watcher_condition ).each do |watcher|
-        watched_user = watcher.user
-        attendee = Attendee.new(watched_user.mail, {"CN" => watched_user.name})
-        event.append_custom_property attendee.property_name, attendee.value
-      end
-
-      # 設定値を見る
-      if ical_setting
-        if ical_setting.alerm
-          # アラーム (VALARM) を作成 (複数作成可能)
-          event.alarm do |alm|
-            alm.action     = "DISPLAY"  # 表示で知らせる
-            alm.trigger    = "-PT#{ical_setting.time_number}#{ical_setting.time_section}"    # -PT5M=5分前に, -PT3H=3時間前, -P1D=1日前
-          end
-        #else
-        #  event.alarm.action = "NONE"
-        end
-      end
+      event = generate_event( ical_setting, user, issue )
       cal.add_event event
     end
     # iCalのContent-Typeが必要
