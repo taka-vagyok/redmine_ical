@@ -22,26 +22,13 @@ class ExportsController < ApplicationController
     "#{id.to_s.crypt(salt)}@example.com"
   end
 
-  def get_unclosed_my_issues(user)
-    #Today = Date.today
-    #startdt = today - ical_setting.past
-    #enddt = today + ical_setting.future
-
-    #watchers = []
-    #watch_users = []
-    #Watcher.find(:all,
-    #  :joins => "LEFT JOIN users ON watchers.user_id = users.id", :conditions => ["watchers.user_id = ? AND watchers.watchable_type = ?", user.id, "Issue"]).each do  |watcher|
-    #  watchers << watcher.watchable_id
-    #  watch_users << watcher.user
-    #end
-    #issues = Issue.find(:all, :conditions => ["start_date >= ? AND due_date <= ? AND (assigned_to_id = ? OR id IN (?) )", startdt, enddt, user.id, watchers.uniq])
-
+  def get_unclosed_my_issues(user_id)
     # 未完了で自分の担当のチケットを取得
     #issues = Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["issues.start_date <= ? AND issues.due_date <= ? AND issues.assigned_to_id = ? AND st.is_closed = ?", startdt, enddt, user.id, false])
-    issues = Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["issues.assigned_to_id = ? AND st.is_closed = ?", user.id, false])
+    issues = Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => [" issues.assigned_to_id = ? AND st.is_closed = ? AND NOT start_date = ""?"" AND NOT due_date = ""?"" ", user_id , false, "", ""])
 
     # Add watching issues, too
-    #issues += Issue.find(:all, :joins => "LEFT JOIN issue_statuses AS st ON issues.status_id = st.id", :conditions => ["? IN (issues.watcher_user_ids) AND st.is_closed = ?", user.id,  false])
+    issues |= Issue.find(:all, :joins => "LEFT JOIN watchers ON NOT issues.status_id = 5 AND issues.id =  watchers.watchable_id" , :conditions => [ "watchers.watchable_type = ""?""" , "Issue" ]  )
     return issues
   end
 
@@ -128,7 +115,7 @@ class ExportsController < ApplicationController
     cal.prodid = "Redmine iCal Plugin"
 
     # Add events from issue
-    issues = get_unclosed_my_issues(user)
+    issues = get_unclosed_my_issues(user.id)
     issues.each do |issue|
       next if issue.start_date.blank?
       next if issue.due_date.blank?
