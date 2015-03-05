@@ -6,11 +6,11 @@
  RAILS_ENV=production rake db:migrate_plugins
 
 == How to Use
-redmineの右上にiCal設定と出てくるので
-そこをクリックして初期設定を行なってください
+1. redmineの右上の「iCal設定」をクリック
+2. 「設定」を必要に応じて変更
+3. 「access keyを更新」をクリック
 
-アクセスキー付きURLが発行されます
-
+アクセスキー付きURLが「現在の設定」の下のテキストボックスに発行されます
 http://your.domain/exports/ical/XXXXXXXXXXXXX
 
 もしベーシック認証などをかけてる場合は
@@ -19,4 +19,5 @@ http://username:password@your.domain/exports/ical/XXXXXXXXXXXXX
 
 == TODO
 - 国際化
-- watcherに入れてるissueも閲覧できるようにする？
+- watcherに入れているissueを含むかを選択できるようにする
+- [Complete] watcherに入れてるissueも閲覧できるようにする。
